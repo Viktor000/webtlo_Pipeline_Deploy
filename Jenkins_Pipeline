@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('1-Build') {
+            steps {
+                // Get some code from a GitHub repository
+                git 'https://github.com/berkut-174/webtlo/'
+                echo "---------Build Start-----------"
+                sh "zip -r ${BUILD_TAG}.zip ./*"
+                echo "---------Build Finish-----------"
+            }
+		}
+        stage('2-Delivery build') {
+            steps([$class: 'BapSshPromotionPublisherPlugin']) {
+                // Get some code from a GitHub repository
+                sshPublisher(
+                    continueOnError: false, failOnError: true,
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: "VPS",
+                            verbose: true,
+                            transfers: [
+                                //sshTransfer(execCommand: "/bin/rm -rf /opt/deploy/helm"),
+                                sshTransfer(sourceFiles: "${BUILD_TAG}.zip",)
+                            ]
+                        )
+                    ]
+                )
+            }
+        }
+        stage('3-Backup app') {
+			steps([$class: 'BapSshPromotionPublisherPlugin']) {
+				echo "---------Backup start--------------"
+                sshPublisher(
+                    continueOnError: false, failOnError: true,
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: "VPS",
+                            verbose: true,
+                            transfers: [
+                                sshTransfer(execCommand: "cd /var/www/html/ ;zip -r /opt/webtlo_backups/`date -I`.zip ./webtlo/"),
+                            ]
+                        )
+                    ]
+                )
+				echo "---------Backup finish-------------"
+            }
+        }
+        stage('4-Deploy app') {
+            steps([$class: 'BapSshPromotionPublisherPlugin']) {
+                echo "---------Deploy start--------------"
+				sshPublisher(
+                    continueOnError: false, failOnError: true,
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: "VPS",
+                            verbose: true,
+                            transfers: [
+                                sshTransfer(execCommand: "unzip -o /var/www/html/${BUILD_TAG}.zip -d /var/www/html/webtlo/"),
+                            ]
+                        )
+                    ]
+                )
+                echo "---------Deploy finish-------------"
+            }
+        }
+            
+    }
+}
+
